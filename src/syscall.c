@@ -90,7 +90,7 @@ static void syscall_writestring(riscv_t *rv) {
     vm_attr_t *attr = PRIV(rv);
 
     riscv_word_t addr = rv_get_reg(rv, rv_reg_a0);
-
+    
     uint32_t total_read = 0;
 
     while (1) {
@@ -113,7 +113,7 @@ static void syscall_writeint(riscv_t *rv)
     riscv_word_t value = rv_get_reg(rv, rv_reg_a0); // O valor a ser escrito está em a0
 
     // Escreve o valor no stdout
-    size_t written = printf("%d\n", value);
+    size_t written = printf("%d", value);
     if (written <= 0) { // Verifica se houve erro na escrita
         rv_set_reg(rv, rv_reg_a0, -1);
         return;
