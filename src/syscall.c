@@ -25,7 +25,9 @@
 /* clang-format off */
 #define SUPPORTED_SYSCALLS           \
     _(writeint,              1)      \
+    _(writestring,           4)      \
     _(readint,               5)      \
+    _(readfloat,             6)      \
     _(close,                57)      \
     _(lseek,                62)      \
     _(read,                 63)      \
@@ -83,6 +85,27 @@ static const char *get_mode_str(uint32_t flags, uint32_t mode UNUSED)
 }
 
 static uint8_t tmp[PREALLOC_SIZE];
+static void syscall_writestring(riscv_t *rv) {
+    vm_attr_t *attr = PRIV(rv);
+
+    riscv_word_t addr = rv_get_reg(rv, rv_reg_a0);
+
+    uint32_t total_read = 0;
+
+    while (1) {
+        memory_read(attr->mem, tmp, addr + total_read, 1);
+        char c = tmp[0];
+
+        if (c == '\0') {
+            break;
+        }
+
+        putchar(c);
+
+        total_read++;
+    }
+}
+
 static void syscall_writeint(riscv_t *rv)
 {
     /* _write(value) */
@@ -95,11 +118,47 @@ static void syscall_writeint(riscv_t *rv)
         return;
     }
 
-    //TODO - Verificar
     rv_set_reg(rv, rv_reg_a0, written); // Retorna o número de bytes escritos
 }
 
 static void syscall_readint(riscv_t *rv) {
+  vm_attr_t *attr = PRIV(rv); // Obtém um ponteiro para um atributo privado da estrutura riscv_t
+
+  /* _read(fd, buf, count); */
+  uint32_t fd = rv_get_reg(rv, 0);// Lê o valor do registrador a0 (descritor de arquivo)
+
+  /* lookup the file */
+  map_iter_t it; // Cria um iterador para buscar o arquivo no mapa de arquivos
+  map_find(attr->fd_map, &it, &fd); // Busca o arquivo correspondente ao descritor
+  if (map_at_end(attr->fd_map, &it)) { // Se não encontrou o arquivo ??
+    /* error */
+    rv_set_reg(rv, rv_reg_a0, -1);
+    return;
+  }
+
+  // Se encontrou o arquivo, pega o ponteiro para ele
+  FILE *handle = map_iter_value(&it, FILE *); // Ponteiro para o arquivo aberto
+
+  // Garante que o buffer tem tamanho suficiente para guardar todos os inteiros
+  char line[sizeof(int) + 1]; // Buffer para armazenar a linha lida do arquivo
+
+  // Lê dados do arquivo para o buffer
+  int value;
+  size_t bytes_read = fscanf(handle, "%d", &value);
+    //TODO - Verificar como indicar erro na leitura de inteiros (Exceção?)
+    #if 0
+    // Verifica se houve erro ou leitura incompleta
+    if (bytes_read == sizeof(int)) {
+        /* error */
+        rv_set_reg(rv, rv_reg_a0, -1);
+        return;
+    }
+    #endif 
+
+  rv_set_reg(rv, rv_reg_a0, value); // Retorna o total de bytes lidos
+}
+
+static void syscall_readfloat(riscv_t *rv) {
   vm_attr_t *attr = PRIV(rv); // Obtém um ponteiro para um atributo privado da estrutura riscv_t
 
   /* _read(fd, buf, count); */
@@ -144,6 +203,7 @@ static void syscall_write(riscv_t *rv)
     riscv_word_t fd = rv_get_reg(rv, rv_reg_a0);
     riscv_word_t buffer = rv_get_reg(rv, rv_reg_a1);
     riscv_word_t count = rv_get_reg(rv, rv_reg_a2);
+
 
     /* lookup the file descriptor */
     map_iter_t it;
