@@ -28,12 +28,13 @@
     _(writestring,           4)      \
     _(readint,               5)      \
     _(readfloat,             6)      \
+    _(exit,                 10)      \
     _(close,                57)      \
     _(lseek,                62)      \
     _(read,                 63)      \
     _(write,                64)      \
     _(fstat,                80)      \
-    _(exit,                 93)      \
+    _(exit2,                 93)      \
     _(gettimeofday,         169)     \
     _(brk,                  214)     \
     _(clock_gettime,        403)     \
@@ -195,6 +196,17 @@ static void syscall_readfloat(riscv_t *rv) {
   rv_set_reg(rv, rv_reg_a0, value); // Retorna o total de bytes lidos
 }
 
+static void syscall_exit(riscv_t *rv)
+{
+    /* simply halt cpu and save exit code.
+     * the application decides the usage of exit code
+     */
+    rv_halt(rv);
+
+    vm_attr_t *attr = PRIV(rv);
+    attr->exit_code = 0;
+}
+
 static void syscall_write(riscv_t *rv)
 {
     vm_attr_t *attr = PRIV(rv);
@@ -247,7 +259,7 @@ error_handler:
 }
 
 
-static void syscall_exit(riscv_t *rv)
+static void syscall_exit2(riscv_t *rv)
 {
     /* simply halt cpu and save exit code.
      * the application decides the usage of exit code
