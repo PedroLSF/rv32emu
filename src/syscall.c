@@ -25,16 +25,21 @@
 /* clang-format off */
 #define SUPPORTED_SYSCALLS           \
     _(writeint,              1)      \
+    _(writefloat,            2)      \
     _(writestring,           4)      \
     _(readint,               5)      \
     _(readfloat,             6)      \
+    _(readstring,            8)      \
     _(exit,                 10)      \
+    _(writechar,            11)      \
+    _(readchar,             12)      \
+    _(writeinthex,          34)      \
     _(close,                57)      \
     _(lseek,                62)      \
     _(read,                 63)      \
     _(write,                64)      \
     _(fstat,                80)      \
-    _(exit2,                 93)      \
+    _(exit2,                93)      \
     _(gettimeofday,         169)     \
     _(brk,                  214)     \
     _(clock_gettime,        403)     \
@@ -107,6 +112,27 @@ static void syscall_writestring(riscv_t *rv) {
     }
 }
 
+static void syscall_writechar(riscv_t *rv) {
+    vm_attr_t *attr = PRIV(rv);
+
+    riscv_word_t addr = rv_get_reg(rv, rv_reg_a0);
+    
+    uint32_t total_read = 0;
+
+    while (1) {
+        memory_read(attr->mem, tmp, addr + total_read, 1);
+        char c = tmp[0];
+        printf("%c", c);
+        if (c == '\0') {
+            break;
+        }
+
+        putchar(c);
+
+        total_read++;
+    }
+}
+
 static void syscall_writeint(riscv_t *rv)
 {
     /* _write(value) */
@@ -121,6 +147,45 @@ static void syscall_writeint(riscv_t *rv)
 
     rv_set_reg(rv, rv_reg_a0, written); // Retorna o número de bytes escritos
 }
+
+static void syscall_writeinthex(riscv_t *rv)
+{
+    /* _writeinthex(value) */
+    riscv_word_t value = rv_get_reg(rv, rv_reg_a0); // O valor a ser escrito está em a0
+
+    // Escreve o valor no stdout em formato hexadecimal
+    size_t written = printf("0x%08x", (unsigned int)value); // Imprime em formato hexadecimal com preenchimento de zeros à esquerda
+
+    if (written <= 0) { // Verifica se houve erro na escrita
+        rv_set_reg(rv, rv_reg_a0, -1);
+        return;
+    }
+
+    rv_set_reg(rv, rv_reg_a0, written); // Retorna o número de bytes escritos
+}
+
+static void syscall_writefloat(riscv_t *rv)
+{
+    /* _write(value) */
+    uint32_t int_value = rv_get_reg(rv, rv_reg_a0); // O valor a ser escrito está em a0 como um inteiro
+    float value;
+    memcpy(&value, &int_value, sizeof(float)); // Converte o valor inteiro para float
+
+    // Formata o valor para impressão
+    char buffer[32]; // Buffer para armazenar o valor formatado
+    snprintf(buffer, sizeof(buffer), "%.5g", value); // Formata com até 5 dígitos significativos
+
+    // Escreve o valor no stdout
+    size_t written = printf("%s", buffer);
+    if (written <= 0) { // Verifica se houve erro na escrita
+        rv_set_reg(rv, rv_reg_a0, -1);
+        return;
+    }
+
+    rv_set_reg(rv, rv_reg_a0, written); // Retorna o número de bytes escritos
+}
+
+
 
 static void syscall_readint(riscv_t *rv) {
   vm_attr_t *attr = PRIV(rv); // Obtém um ponteiro para um atributo privado da estrutura riscv_t
@@ -160,40 +225,34 @@ static void syscall_readint(riscv_t *rv) {
 }
 
 static void syscall_readfloat(riscv_t *rv) {
-  vm_attr_t *attr = PRIV(rv); // Obtém um ponteiro para um atributo privado da estrutura riscv_t
+    vm_attr_t *attr = PRIV(rv); // Obtém um ponteiro para um atributo privado da estrutura riscv_t
 
-  /* _read(fd, buf, count); */
-  uint32_t fd = rv_get_reg(rv, 0);// Lê o valor do registrador a0 (descritor de arquivo)
+    /* _read(fd, buf, count); */
+    uint32_t fd = rv_get_reg(rv, rv_reg_a0);// Lê o valor do registrador a0 (descritor de arquivo)
 
-  /* lookup the file */
-  map_iter_t it; // Cria um iterador para buscar o arquivo no mapa de arquivos
-  map_find(attr->fd_map, &it, &fd); // Busca o arquivo correspondente ao descritor
-  if (map_at_end(attr->fd_map, &it)) { // Se não encontrou o arquivo ??
-    /* error */
-    rv_set_reg(rv, rv_reg_a0, -1);
-    return;
-  }
-
-  // Se encontrou o arquivo, pega o ponteiro para ele
-  FILE *handle = map_iter_value(&it, FILE *); // Ponteiro para o arquivo aberto
-
-  // Garante que o buffer tem tamanho suficiente para guardar todos os inteiros
-  char line[sizeof(int) + 1]; // Buffer para armazenar a linha lida do arquivo
-
-  // Lê dados do arquivo para o buffer
-  int value;
-  size_t bytes_read = fscanf(handle, "%d", &value);
-    //TODO - Verificar como indicar erro na leitura de inteiros (Exceção?)
-    #if 0
-    // Verifica se houve erro ou leitura incompleta
-    if (bytes_read == sizeof(int)) {
+    /* lookup the file */
+    map_iter_t it; // Cria um iterador para buscar o arquivo no mapa de arquivos
+    map_find(attr->fd_map, &it, &fd); // Busca o arquivo correspondente ao descritor
+    if (map_at_end(attr->fd_map, &it)) { // Se não encontrou o arquivo
         /* error */
         rv_set_reg(rv, rv_reg_a0, -1);
         return;
     }
-    #endif 
 
-  rv_set_reg(rv, rv_reg_a0, value); // Retorna o total de bytes lidos
+    // Se encontrou o arquivo, pega o ponteiro para ele
+    FILE *handle = map_iter_value(&it, FILE *); // Ponteiro para o arquivo aberto
+
+    // Lê dados do arquivo para o buffer
+    float value;
+    if (fscanf(handle, "%f", &value) != 1) {
+        rv_set_reg(rv, rv_reg_a0, -1);
+        return;
+    }
+
+    uint32_t int_value;
+    memcpy(&int_value, &value, sizeof(float)); // Converte o valor float para inteiro
+
+    rv_set_reg(rv, rv_reg_a0, int_value); // Retorna o valor lido
 }
 
 static void syscall_exit(riscv_t *rv)
@@ -438,6 +497,61 @@ static void syscall_read(riscv_t *rv)
     }
     /* success */
     rv_set_reg(rv, rv_reg_a0, total_read);
+}
+
+static void syscall_readstring(riscv_t *rv)
+{
+    vm_attr_t *attr = PRIV(rv);
+
+    uint32_t buf = rv_get_reg(rv, rv_reg_a0);
+    uint32_t max_chars = rv_get_reg(rv, rv_reg_a1);
+
+    char myString[PREALLOC_SIZE];
+    scanf("%[^\n]s", myString);
+    // Quantos caracteres foram lidos (excluindo o '\0').
+    uint32_t total_read = strlen(myString);
+
+    if (total_read > max_chars - 1) {
+        total_read = max_chars - 1;
+    }
+
+    // Escrevemos a string na memória usando memory_write.
+    for (uint32_t i = 0; i < total_read; ++i) {
+        memory_write(attr->mem, buf + i, &myString[i], 1);
+    }
+    // Adicionamos o terminador nulo '\0' ao final da string na memória.
+    memory_write(attr->mem, buf + total_read, (const uint8_t *) "\0", 1);
+
+    // Retornamos o número total de caracteres lidos (excluindo o '\0').
+    rv_set_reg(rv, rv_reg_a0, total_read);
+}
+
+static void syscall_readchar(riscv_t *rv)
+{
+    vm_attr_t *attr = PRIV(rv);
+
+    uint32_t buf = rv_get_reg(rv, rv_reg_a0);
+    uint32_t max_chars = rv_get_reg(rv, rv_reg_a1);
+
+    // Verificar se o buffer tem espaço para pelo menos um caractere e o terminador nulo.
+    if (max_chars < 2) {
+        rv_set_reg(rv, rv_reg_a0, 0); // Retornar 0 caracteres lidos se o buffer for muito pequeno.
+        return;
+    }
+
+    // Ler um único caractere da entrada padrão.
+    char ch;
+    scanf("%c", &ch);
+
+    // Escrever o caractere lido na memória.
+    memory_write(attr->mem, buf, &ch, 1);
+
+    // Adicionar o terminador nulo '\0' ao final do caractere na memória.
+    char null_terminator = '\0';
+    memory_write(attr->mem, buf + 1, &null_terminator, 1);
+
+    // Retornar o número total de caracteres lidos (1, excluindo o '\0').
+    rv_set_reg(rv, rv_reg_a0, 1);
 }
 
 static void syscall_fstat(riscv_t *rv UNUSED)
