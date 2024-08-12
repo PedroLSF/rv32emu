@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "softfloat.h"
 
 #if !defined(_WIN32) && !defined(_WIN64)
 #include <unistd.h>
@@ -34,6 +35,10 @@
 #endif
 
 #define BLOCK_IR_MAP_CAPACITY_BITS 10
+
+#if RV32_HAS(EXT_F)
+typedef softfloat_float32_t riscv_float_t;
+#endif
 
 #if !RV32_HAS(JIT)
 /* initialize the block map */
@@ -102,8 +107,17 @@ riscv_word_t rv_get_pc(riscv_t *rv)
 void rv_set_reg(riscv_t *rv, uint32_t reg, riscv_word_t in)
 {
     assert(rv);
-    if (reg < N_RV_REGS && reg != rv_reg_zero)
+    if (reg < N_RV_FLOAT_REGS && reg != rv_reg_zero)
         rv->X[reg] = in;
+}
+
+void rv_set_freg(riscv_t *rv, uint32_t reg, riscv_float_t in) {
+    assert(rv);
+    if (reg < N_RV_FLOAT_REGS) {
+        rv->F[reg] = in;
+    } else {
+        printf("rv_set_freg: erro, registrador %u fora do intervalo\n", reg);
+    }
 }
 
 riscv_word_t rv_get_reg(riscv_t *rv, uint32_t reg)
@@ -113,6 +127,16 @@ riscv_word_t rv_get_reg(riscv_t *rv, uint32_t reg)
         return rv->X[reg];
 
     return ~0U;
+}
+
+riscv_float_t rv_get_freg(riscv_t *rv, uint32_t reg) {
+    assert(rv);
+    if (reg < N_RV_REGS) {
+        return rv->F[reg];
+
+    }
+    riscv_float_t zero = {0};
+    return zero;
 }
 
 /* Remap standard stream
@@ -184,8 +208,7 @@ IO_HANDLER_IMPL(byte, write_b, W)
 #undef R
 #undef W
 
-riscv_t *rv_create(riscv_user_t rv_attr)
-{
+riscv_t *rv_create(riscv_user_t rv_attr) {
     assert(rv_attr);
 
     riscv_t *rv = calloc(1, sizeof(riscv_t));
@@ -269,6 +292,10 @@ riscv_t *rv_create(riscv_user_t rv_attr)
     rv->jit_state = jit_state_init(CODE_CACHE_SIZE);
     rv->block_cache = cache_create(BLOCK_MAP_CAPACITY_BITS);
     assert(rv->block_cache);
+#endif
+
+#if RV32_HAS(EXT_F)
+    memset(rv->F, 0, sizeof(riscv_float_t) * N_RV_REGS);
 #endif
 
     return rv;

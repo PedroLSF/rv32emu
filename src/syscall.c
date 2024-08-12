@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include "softfloat.h"
 
 #include "riscv.h"
 #include "riscv_private.h"
@@ -164,25 +165,24 @@ static void syscall_writeinthex(riscv_t *rv)
     rv_set_reg(rv, rv_reg_a0, written); // Retorna o número de bytes escritos
 }
 
-static void syscall_writefloat(riscv_t *rv)
-{
-    /* _write(value) */
-    uint32_t int_value = rv_get_reg(rv, rv_reg_a0); // O valor a ser escrito está em a0 como um inteiro
-    float value;
-    memcpy(&value, &int_value, sizeof(float)); // Converte o valor inteiro para float
+static void syscall_writefloat(riscv_t *rv) {
+    assert(rv);
 
-    // Formata o valor para impressão
-    char buffer[32]; // Buffer para armazenar o valor formatado
-    snprintf(buffer, sizeof(buffer), "%.5g", value); // Formata com até 5 dígitos significativos
+    // Lê o valor do registrador fa0 (usando F[a0]/F[10])
+    riscv_float_t float_value = rv_get_freg(rv, rv_reg_fa0);
+
+    float value;
+
+    // Converte o valor do formato riscv_float_t para float
+    memcpy(&value, &float_value, sizeof(float));
 
     // Escreve o valor no stdout
-    size_t written = printf("%s", buffer);
+    size_t written = printf("%.1f", value);
     if (written <= 0) { // Verifica se houve erro na escrita
-        rv_set_reg(rv, rv_reg_a0, -1);
+        riscv_float_t error_value = i32_to_f32(-1);
+        rv_set_freg(rv, rv_reg_fa0, error_value);
         return;
     }
-
-    rv_set_reg(rv, rv_reg_a0, written); // Retorna o número de bytes escritos
 }
 
 
@@ -225,34 +225,33 @@ static void syscall_readint(riscv_t *rv) {
 }
 
 static void syscall_readfloat(riscv_t *rv) {
-    vm_attr_t *attr = PRIV(rv); // Obtém um ponteiro para um atributo privado da estrutura riscv_t
+    vm_attr_t *attr = PRIV(rv); // Obtains a pointer to a private attribute of the riscv_t structure
 
-    /* _read(fd, buf, count); */
-    uint32_t fd = rv_get_reg(rv, rv_reg_a0);// Lê o valor do registrador a0 (descritor de arquivo)
+    // Read the file descriptor from the integer register a0
+    softfloat_float32_t fd = rv_get_freg(rv, rv_reg_fa0);
 
-    /* lookup the file */
-    map_iter_t it; // Cria um iterador para buscar o arquivo no mapa de arquivos
-    map_find(attr->fd_map, &it, &fd); // Busca o arquivo correspondente ao descritor
-    if (map_at_end(attr->fd_map, &it)) { // Se não encontrou o arquivo
-        /* error */
-        rv_set_reg(rv, rv_reg_a0, -1);
+    // Lookup the file associated with the file descriptor
+    map_iter_t it;
+    map_find(attr->fd_map, &it, &fd);
+
+    if (map_at_end(attr->fd_map, &it)) {
+        // Descritor de arquivo não encontrado; define o código de erro como um valor de ponto flutuante
+        softfloat_float32_t error_value = i32_to_f32(-1);
+        rv_set_freg(rv, rv_reg_fa0, error_value);
         return;
     }
 
-    // Se encontrou o arquivo, pega o ponteiro para ele
-    FILE *handle = map_iter_value(&it, FILE *); // Ponteiro para o arquivo aberto
+    // Get the file pointer from the map
+    FILE *handle = map_iter_value(&it, FILE *);
 
-    // Lê dados do arquivo para o buffer
+    // Read a float value from the file
     float value;
-    if (fscanf(handle, "%f", &value) != 1) {
-        rv_set_reg(rv, rv_reg_a0, -1);
-        return;
-    }
+    size_t bytes_read = fscanf(handle, "%f", &value);
 
-    uint32_t int_value;
-    memcpy(&int_value, &value, sizeof(float)); // Converte o valor float para inteiro
-
-    rv_set_reg(rv, rv_reg_a0, int_value); // Retorna o valor lido
+    // Convert the float to the appropriate floating-point type and store it in register f0
+    riscv_float_t float_value;
+    memcpy(&float_value, &value, sizeof(float));
+    rv_set_freg(rv, rv_reg_fa0, float_value);
 }
 
 static void syscall_exit(riscv_t *rv)

@@ -28,6 +28,48 @@
 extern "C" {
 #endif
 
+#define RV_REGS_FLOAT_LIST                          \
+    _(ft0) /* FP temporaries */                     \
+    _(ft1)                                            \
+    _(ft2)                                            \
+    _(ft3)                                            \
+    _(ft4)                                            \
+    _(ft5)                                            \
+    _(ft6)                                            \
+    _(ft7)                                            \
+    _(fs0) /* FP saved registers (callee) */         \
+    _(fs1)                                            \
+    _(fa0) /* FP arguments/return values (caller) */ \
+    _(fa1)                                            \
+    _(fa2) /* FP arguments (callee) */               \
+    _(fa3)                                            \
+    _(fa4)                                            \
+    _(fa5)                                            \
+    _(fa6)                                            \
+    _(fa7)                                            \
+    _(fs2) /* FP saved registers (callee) */         \
+    _(fs3)                                            \
+    _(fs4)                                            \
+    _(fs5)                                            \
+    _(fs6)                                            \
+    _(fs7)                                            \
+    _(fs8)                                            \
+    _(fs9)                                            \
+    _(fs10)                                           \
+    _(fs11)                                           \
+    _(ft8) /* FP temporaries (callee) */             \
+    _(ft9)                                            \
+    _(ft10)                                           \
+    _(ft11)                                           \
+
+/* Floating-point RISC-V registers */
+enum {
+#define _(r) rv_reg_##r,
+    RV_REGS_FLOAT_LIST
+#undef _
+    N_RV_FLOAT_REGS
+};
+
 #define RV_REGS_LIST                                   \
     _(zero) /* hard-wired zero, ignoring any writes */ \
     _(ra)   /* return address */                       \
@@ -60,7 +102,7 @@ extern "C" {
     _(t3) /* temporary register */                     \
     _(t4)                                              \
     _(t5)                                              \
-    _(t6)
+    _(t6)                                               
 
 /* RISC-V registers (mnemonics, ABI names)
  *
@@ -177,6 +219,10 @@ riscv_word_t rv_get_pc(riscv_t *rv);
 /* set a register of the RISC-V emulator */
 void rv_set_reg(riscv_t *rv, uint32_t reg, riscv_word_t in);
 
+
+/* set a float register of the RISC-V emulator */
+void rv_set_freg(riscv_t *rv, uint32_t reg, riscv_float_t in);
+
 typedef struct {
     int fd;
     FILE *file;
@@ -187,6 +233,9 @@ void rv_remap_stdstream(riscv_t *rv, fd_stream_pair_t *fsp, uint32_t fsp_size);
 
 /* get a register of the RISC-V emulator */
 riscv_word_t rv_get_reg(riscv_t *rv, uint32_t reg);
+
+/* get a float register of the RISC-V emulator */
+riscv_float_t rv_get_freg(riscv_t *rv, uint32_t reg);
 
 /* system call handler */
 void syscall_handler(riscv_t *rv);
