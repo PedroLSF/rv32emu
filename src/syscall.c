@@ -181,10 +181,6 @@ static void syscall_readint(riscv_t *rv) {
     int value;
     size_t bytes_read = scanf("%d", &value);
 
-    // Limpa o buffer de entrada
-    int ch;
-    while ((ch = getchar()) != '\n' && ch != EOF);
-
     if (bytes_read != 1) {
         rv_set_reg(rv, rv_reg_a0, -1);
         return;
@@ -474,7 +470,10 @@ static void syscall_read(riscv_t *rv)
 
 static void syscall_readstring(riscv_t *rv)
 {
+
+    setbuf(stdin, NULL);
     vm_attr_t *attr = PRIV(rv);
+
 
     uint32_t buf = rv_get_reg(rv, rv_reg_a0);
     uint32_t max_chars = rv_get_reg(rv, rv_reg_a1);
@@ -510,19 +509,23 @@ static void syscall_readstring(riscv_t *rv)
 
 
 static void syscall_readchar(riscv_t *rv)
-{
-    // Lê o caractere da entrada padrão
-    char value;
-    size_t bytes_read = scanf(" %c", &value); // O espaço antes de %c ignora espaços em branco
+{  
+    setbuf(stdin, NULL);
+    char myString[PREALLOC_SIZE];
 
-    // Verifica se houve erro na leitura
-    if (bytes_read != 1) { // scanf retorna 1 se a leitura do caractere foi bem-sucedida
-        rv_set_reg(rv, rv_reg_a0, -1); // Define -1 em caso de erro
+    // Verifica o valor de retorno de fgets para garantir que a leitura foi bem-sucedida
+    if (fgets(myString, sizeof(myString), stdin) == NULL) {
+        rv_set_reg(rv, rv_reg_a0, -1);
         return;
     }
 
-    // Armazena o valor ASCII do caractere lido no registrador a0
-    rv_set_reg(rv, rv_reg_a0, (int)value); // Converte o char para int (valor ASCII) para armazenar no registrador
+    // Remove o '\n' do final da string, se presente
+    size_t len = strlen(myString);
+    if (len > 0 && myString[len - 1] == '\n') {
+        myString[len - 1] = '\0';
+    }
+    
+    rv_set_reg(rv, rv_reg_a0, (int)myString[0]);
 }
 
 static void syscall_fstat(riscv_t *rv UNUSED)
