@@ -505,6 +505,10 @@ static void syscall_readstring(riscv_t *rv)
     }
     // Adicionamos o terminador nulo '\0' ao final da string na memória
     memory_write(attr->mem, buf + total_read, (const uint8_t *) "\0", 1);
+
+    // Limpa Buffer para arquivos ao final do processo
+    int c;
+    while((c = getchar()) != EOF && c=='\n'){}
 }
 
 
@@ -526,6 +530,10 @@ static void syscall_readchar(riscv_t *rv)
     }
     
     rv_set_reg(rv, rv_reg_a0, (int)myString[0]);
+
+    // Limpa Buffer para arquivos ao final do processo
+    int c;
+    while((c = getchar()) != EOF && c=='\n'){}
 }
 
 static void syscall_fstat(riscv_t *rv UNUSED)
